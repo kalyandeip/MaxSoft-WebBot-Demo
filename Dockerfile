@@ -1,31 +1,26 @@
-# ─── Stage 1: Build the JAR ───
+# Stage 1: Build
 FROM maven:3.8.5-openjdk-17 AS builder
-
 WORKDIR /app
 
-# Copy POM and fetch dependencies to utilize Docker cache
+# Copy project files
 COPY pom.xml ./
-RUN mvn -B dependency:go-offline
-
-# Copy source code and build
 COPY src ./src
+COPY ext/MaxSoft-WebBot-1.0-SNAPSHOT.jar ./ext/
+
+# Install the external jar into local Maven repo
+RUN mvn install:install-file \
+  -Dfile=ext/MaxSoft-WebBot-1.0-SNAPSHOT.jar \
+  -DgroupId=com.maxsoft.webbot \
+  -DartifactId=MaxSoft-WebBot \
+  -Dversion=1.0-SNAPSHOT \
+  -Dpackaging=jar
+
+# Resolve dependencies then build
+RUN mvn -B dependency:go-offline
 RUN mvn -B clean package -DskipTests
 
-# ─── Stage 2: Runtime Image ───
+# Stage 2: Runtime
 FROM openjdk:17-slim
-
-# Create non-root user (optional but recommended)
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-
 WORKDIR /app
-
-# Copy only the built JAR
 COPY --from=builder /app/target/MaxSoft-WebBot-Demo-1.0-SNAPSHOT.jar app.jar
-
-RUN chown appuser:appgroup /app/app.jar
-USER appuser
-
-# Adjust this if your app listens on a port
-EXPOSE 8080
-
 ENTRYPOINT ["java", "-jar", "app.jar"]
